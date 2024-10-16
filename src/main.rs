@@ -17,6 +17,11 @@ async fn sleep(d: u64) {
   time::sleep(time::Duration::from_secs(d)).await;
   log::info!("Awake from {}", d);
 }
+async fn do_something(d: u64) {
+  log::info!("do_something");
+  time::sleep(time::Duration::from_secs(d)).await;
+  log::info!("end_of_something");
+}
 async fn read_file() {
   log::info!("Reading file README.md");
   let mut f = tokio::fs::File::open("README.md").await.unwrap();
@@ -33,8 +38,8 @@ async fn read_file() {
   .await
   .unwrap();
 }
-async fn run_tokio_join() {
-  log::info!("run_tokio_join");
+async fn fire_and_wait() {
+  log::info!("fire_and_wait");
   tokio::join!(sleep(1), read_file(), read_file(), read_file(),);
 }
 async fn run_in_serial() {
@@ -44,6 +49,13 @@ async fn run_in_serial() {
   }
   //sleep(1).await;
 }
+async fn fire_and_forget() {
+  log::info!("fire_and_forget");
+  tokio::spawn(async {
+    sleep(1).await;
+  });
+  do_something(1).await;
+}
 
 #[tokio::main]
 async fn main() {
@@ -52,12 +64,13 @@ async fn main() {
 
   //#[tokio::main] can replace below
   //let runtime = tokio::runtime::Runtime::new().unwrap();
-  //let future = run_tokio_join();
+  //let future = fire_and_wait();
   //let future = run_in_serial2();
 
   let start_time = std::time::Instant::now();
-  //runtime.block_on(future);
-  run_tokio_join().await;
+  //runtime.block_on(future);//replaced by tokio::main
+  //fire_and_wait().await;
+  fire_and_forget().await;
 
   let end_time = std::time::Instant::now();
   log::info!("took {:?} seconds", end_time - start_time);
