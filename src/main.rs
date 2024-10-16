@@ -3,7 +3,7 @@
 */
 use log::Level;
 use tokio::io::AsyncReadExt;
-use tokio::time;
+use tokio::{sync, time};
 
 pub fn fib(n: u32) -> u32 {
   match n {
@@ -57,6 +57,41 @@ async fn fire_and_forget() {
   do_something(1).await;
 }
 
+struct MyStruct {
+  field: i32,
+}
+async fn cross_concurrency() {
+  log::info!("cross_concurrency");
+  let lock = std::sync::Arc::new(sync::Mutex::new(MyStruct { field: 0 }));
+  let lock_a = lock.clone();
+  let lock_b = lock.clone();
+  let a = tokio::spawn(async move {
+    let mut val = lock_a.lock().await;
+    val.field = 1;
+  });
+  let b = tokio::spawn(async move {
+    let mut val = lock_b.lock().await;
+    val.field = 2;
+  });
+  tokio::join!(a, b).0.unwrap();
+
+  let val = lock.lock().await;
+  println!("value field is: {}", val.field)
+}
+
+async fn cross_threads() {
+  log::info!("cross_threads");
+  let (tx, mut rx) = tokio::sync::mpsc::channel(10);
+  tokio::spawn(async move {
+    for i in 0..10 {
+      tx.send(i).await.unwrap();
+    }
+  });
+  while let Some(value) = rx.recv().await {
+    println!("received value: {}", value);
+  }
+}
+
 #[tokio::main]
 async fn main() {
   println!("--------== test_async_tokio");
@@ -70,7 +105,9 @@ async fn main() {
   let start_time = std::time::Instant::now();
   //runtime.block_on(future);//replaced by tokio::main
   //fire_and_wait().await;
-  fire_and_forget().await;
+  //fire_and_forget().await;
+  //cross_concurrency().await;
+  cross_threads().await;
 
   let end_time = std::time::Instant::now();
   log::info!("took {:?} seconds", end_time - start_time);
