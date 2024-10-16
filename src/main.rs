@@ -3,7 +3,7 @@
 */
 use log::Level;
 use tokio::io::AsyncReadExt;
-use tokio::{sync, time};
+use tokio::{sync, task, time};
 
 pub fn fib(n: u32) -> u32 {
   match n {
@@ -22,6 +22,12 @@ async fn do_something(d: u64) {
   time::sleep(time::Duration::from_secs(d)).await;
   log::info!("end_of_something");
 }
+async fn return_something(d: u64) -> u32 {
+  log::info!("return_something");
+  time::sleep(time::Duration::from_secs(d)).await;
+  log::info!("end_of_return_something");
+  5
+}
 async fn read_file() {
   log::info!("Reading file README.md");
   let mut f = tokio::fs::File::open("README.md").await.unwrap();
@@ -29,14 +35,35 @@ async fn read_file() {
   f.read_to_end(&mut contents).await.unwrap();
   log::info!("Read README.md {} bytes", contents.len());
 
-  //run in parallel threads
-  tokio::task::spawn_blocking(move || {
+  //run in parallel threads...like Go routines
+  task::spawn_blocking(move || {
     log::info!("start a new thread");
     fib(43);
     log::info!("end a new thread");
   })
   .await
   .unwrap();
+}
+async fn task_spawn_blocking() {
+  log::info!("task_spawn_blocking... like Go routines");
+  let a = task::spawn_blocking(|| {
+    log::info!("Starting fib(40)...");
+    let res = fib(40);
+    log::info!("fib(40) = {}", res);
+  });
+  let b = task::spawn_blocking(|| {
+    log::info!("Starting fib(39)...");
+    let res = fib(39);
+    log::info!("fib(39) = {}", res);
+  });
+  tokio::join!(a, b).0.unwrap();
+}
+async fn time_out() -> Result<(), Box<dyn std::error::Error>> {
+  log::info!("time_out");
+  if let Err(_) = time::timeout(time::Duration::from_secs(2), sleep(5)).await {
+    log::info!("Sleep() timed out...");
+  };
+  Ok(())
 }
 async fn fire_and_wait() {
   log::info!("fire_and_wait");
@@ -100,15 +127,30 @@ async fn main() {
   //#[tokio::main] can replace below
   //let runtime = tokio::runtime::Runtime::new().unwrap();
   //let future = fire_and_wait();
-  //let future = run_in_serial2();
+  //let future = run_in_serial();
 
   let start_time = std::time::Instant::now();
   //runtime.block_on(future);//replaced by tokio::main
   //fire_and_wait().await;
   //fire_and_forget().await;
   //cross_concurrency().await;
-  cross_threads().await;
+  //cross_threads().await;
+  //task_spawn_blocking().await;
+  let _ = time_out().await;
 
   let end_time = std::time::Instant::now();
   log::info!("took {:?} seconds", end_time - start_time);
+}
+
+//cargo test -q
+#[cfg(test)]
+mod tests {
+  use super::*;
+  //use crate::return_something;
+
+  #[tokio::test]
+  async fn test_do_something() {
+    let res = return_something(2).await;
+    assert_eq!(res, 5);
+  }
 }
